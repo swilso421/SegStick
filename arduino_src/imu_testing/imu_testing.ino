@@ -31,6 +31,7 @@ const int AvgAngles = 3;
 
 
 float angles[5];
+float values[6];
 
 float currAngle, prevAngle;
 float prevAngles[AvgAngles];
@@ -76,12 +77,27 @@ void setup() {
 
 void loop() {
 
-  updateAngle();
-  Serial.println(currAngle);
+  //updateAngle();
+  updateValues();
+  //Serial.println(currAngle);
   delay(500);
   
 }
 
+void updateValues() {
+  sixDOF.getValues(values);
+  Serial.print(values[0]);
+  Serial.print(" ");
+  Serial.print(values[1]);
+  Serial.print(" ");
+  Serial.print(values[2]);
+  Serial.print(" ");
+  Serial.print(values[3]);
+  Serial.print(" ");
+  Serial.print(values[4]);
+  Serial.print(" ");
+  Serial.println(values[5]);
+}
   
 void updateAngle() {
   sixDOF.getYawPitchRoll(angles);
