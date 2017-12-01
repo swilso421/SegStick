@@ -1,10 +1,15 @@
+#include <Wire.h>
+#include <FreeSixIMU.h>
+#include <FIMU_ADXL345.h>
+#include <FIMU_ITG3200.h>
+
 #define LPWM 9          // left motor PWM
 #define RPWM 10         // right motor PWM
 #define LDIR 11         // left motor direction
 #define RDIR 12         // right motor direction
 
-#define SDA_PIN 0
-#define SCL_PIN 1
+#define SDA_PIN 4
+#define SCL_PIN 5
 
 //#define A_PIN 0         // accelerometer analog input
 //#define G_PIN 4         // gyro analog input
@@ -28,6 +33,23 @@ float angle = 0.0;      // [deg]
 float rate = 0.0;       // [deg/s]
 float output = 0.0;     // [LSB] (100% voltage to motor is 255LSB)
 
+signed int output_left = 0;
+signed int output_right = 0;
+signed int steer_raw = 0;
+
+const int AvgAngles = 3;
+float prevTargetAngle = 0;
+float targetAngle = 0;
+
+float angles[5];
+float values[6];
+
+float currAngle, prevAngle;
+float prevAngles[AvgAngles];
+int prevAngleI = 0;
+
+FreeSixIMU sixDOF = FreeSixIMU();
+
 void setup()
 {
   // Make sure all motor controller pins start low.
@@ -41,7 +63,7 @@ void setup()
   pinMode(RPWM, OUTPUT);
   pinMode(LDIR, OUTPUT);
   pinMode(RDIR, OUTPUT);
-  pinMode(13, OUTPUT);
+  pinMode(13, OUTPUT); //What is this for?!?
   
   // switch to 15.625kHz PWM
   TCCR1B &= ~0x07;
@@ -50,30 +72,35 @@ void setup()
   TCCR1A |= 0x02;
   
   Serial.begin(9600);
+
+  // For the IMU
+  Wire.begin();
+
+  delay(5);
+  sixDOF.init(); //Begin the IMU
+  delay(5);
+  
 }
 
 void loop()
 {
-  signed int accel_raw = 0;
-  signed int gyro_raw = 0;
-  signed int output_left = 0;
-  signed int output_right = 0;
-  signed int steer_raw = 0;
-  
   // Loop speed test.
   digitalWrite(13, HIGH);
   
   // Read in the raw accelerometer, gyro, and steering singals.
   // Offset for zero angle/rate.
-  accel_raw = (signed int) analogRead(A_PIN) - A_ZERO;
-  gyro_raw = G_ZERO - (signed int) analogRead(G_PIN);
+  //accel_raw = (signed int) analogRead(A_PIN) - A_ZERO;
+  //gyro_raw = G_ZERO - (signed int) analogRead(G_PIN);
   steer_raw = (signed int) analogRead(S_PIN) - S_ZERO;
+
+  updateCurrAngle();
+  sixDOF.getValues(values);
   
   // Scale the gyro to [deg/s].
-  rate = (float) gyro_raw * G_GAIN;
+  rate = values[4];
   
   // Complementarty filter.
-  angle = A * (angle + rate * DT) + (1 - A) * (float) accel_raw * A_GAIN;
+  angle = A * (angle + rate * DT) + (1 - A) * currAngle;
   
   // PD controller.
   output += angle * KP + rate * KD;
@@ -122,5 +149,17 @@ void loop()
  
   // Delay for consistent loop rate.
   delay(20);
-} 
+}
+
+void updateCurrAngle() {
+  sixDOF.getYawPitchRoll(angles);
+  prevAngles[prevAngleI] = angles[1];
+  prevAngleI = (prevAngleI + 1) % AvgAngles;
+  float sum = 0;
+  for (int i = 0; i < AvgAngles; i++)
+      sum += prevAngles[i];
+  currAngle = sum / AvgAngles;
+  prevAngle = currAngle;
+  
+}
 
